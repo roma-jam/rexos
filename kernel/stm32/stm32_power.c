@@ -199,6 +199,14 @@ static inline void stm32_power_hsi_on()
     while ((RCC->CR & RCC_CR_HSIRDY) == 0) {}
 }
 
+#if (MSI_RANGE)
+static inline void stm32_power_msi_on()
+{
+    RCC->CR |= RCC_CR_MSION;
+    while ((RCC->CR & RCC_CR_MSIRDY) == 0) {}
+}
+#endif // MSI_RANGE
+
 #if (POWER_MANAGEMENT)
 #if (HSE_VALUE)
     //
@@ -215,6 +223,21 @@ static void stm32_power_msi_set_range(unsigned int range)
     __NOP();
     __NOP();
 }
+
+#if (MSI_RANGE)
+static inline void stm32_power_msi_off()
+{
+    RCC->CR &= ~RCC_CR_MSION;
+}
+
+static void stm32_power_msi_set_range(unsigned int range)
+{
+    RCC->ICSCR = ((RCC->ICSCR) & ~(7 << 13)) | ((range & 7) << 13);
+    __NOP();
+    __NOP();
+}
+#endif // MSI RANGE
+
 #endif //STM32L0 || STM32L1
 #endif // HSI || MSI
 #endif //POWER_MANAGEMENT
@@ -731,8 +754,11 @@ void stm32_power_init(EXO* exo)
 #else
     RCC->CR |= (value << 29);
 #endif
-
 #endif // HSE_RTC_DIV
+#if (MSI_RANGE)
+    stm32_power_msi_on();
+    stm32_power_msi_set_range(MSI_RANGE);
+#endif // MSI
 #endif // STM32L0 || STM32L1
 
 #endif //(POWER_MANAGEMENT) || (STM32_RTC_DRIVER)

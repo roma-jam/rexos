@@ -221,6 +221,8 @@ void ack(HANDLE process, unsigned int cmd, unsigned int param1, unsigned int par
     \retval returned param2
 */
 
+#define ack_exo(cmd, param1, param2, param3)                        ack(KERNEL_HANDLE, (cmd), (param1), (param2), param3)
+
 unsigned int get(HANDLE process, unsigned int cmd, unsigned int param1, unsigned int param2, unsigned int param3);
 
 /**

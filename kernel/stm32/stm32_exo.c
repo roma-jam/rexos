@@ -115,9 +115,8 @@ void exodriver_post(IPC* ipc)
 
 void exodriver_init()
 {
-//ISR disabled at this point
+    //ISR disabled at this point
     __KERNEL->exo = kmalloc(sizeof(EXO));
-//    object_set_self(SYS_OBJ_CORE);
 
 #if (STM32_WDT_DRIVER)
     stm32_wdt_pre_init();

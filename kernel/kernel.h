@@ -86,8 +86,11 @@ typedef struct {
     int irq_pend_list_size;
     char irq_pend_mask[(IRQ_VECTORS_COUNT + 7) / 8];
 #endif
+
+#ifdef EXODRIVERS
     //---------------------------- exodriver ---------------------------
     void* exo;
+#endif // EXODRIVERS
 
     //------------------------- timer specific -------------------------
     SYSTIME uptime;

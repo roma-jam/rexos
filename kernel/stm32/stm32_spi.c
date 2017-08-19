@@ -1,151 +1,285 @@
 /*
-    RExOS - embedded RTOS
-    Copyright (c) 2011-2017, Alexey Kramarenko
-    All rights reserved.
-*/
+ * stm32_spi.c
+ *
+ *  Created on: 1 апр. 2017 г.
+ *      Author: RomaJam
+ */
 
 #include "stm32_spi.h"
 #include "stm32_exo_private.h"
-#include "../kstdlib.h"
+#include "../../userspace/stdlib.h"
 #include "../../userspace/stdio.h"
-#include "../kirq.h"
+#include "../../userspace/spi.h"
+#include "../../userspace/irq.h"
 #include "../../userspace/stm32/stm32_driver.h"
-#include "../../userspace/stm32/stm32.h"
+#include "../kstdlib.h"
+#include "../kirq.h"
 
 typedef SPI_TypeDef* SPI_TypeDef_P;
 #if (SPI_COUNT > 1)
 static const SPI_TypeDef_P __SPI_REGS[] =                               {SPI1, SPI2};
-static const uint8_t __SPI_VECTORS[] =                                  {25, 26};
-static const uint8_t __SPI_POWER_PINS[] =                               {12, 14};// APB2ENR, APB1ENR
+static const uint8_t __SPI_VECTORS[] =                                  {35, 36};
 #else
+static const SPI_TypeDef_P __SPI_REGS[] =                               {SPI1};
+static const uint8_t __SPI_VECTORS[] =                                  {35};
+static const uint32_t __SPI_CLOCK[] =                                   {RCC_APB2ENR_SPI1EN};
 #endif
+
 
 void stm32_spi_init(EXO* exo)
 {
     int i;
-    for (i = 0; i < I2C_COUNT; ++i)
+    for (i = 0; i < SPI_COUNT; ++i)
         exo->spi.spis[i] = NULL;
+}
+
+static inline void stm32_spi_enable(SPI_TypeDef* SPI, bool enable)
+{
+    if(enable)
+        SPI->CR1 |=  SPI_CR1_SPE;
+    else
+        SPI->CR1 &= ~SPI_CR1_SPE;
+}
+
+static void stm32_spi_on_status_isr(SPI* spi, SPI_PORT port)
+{
+    if(__SPI_REGS[port]->SR & SPI_SR_OVR)
+    {
+#if (SPI_DEBUG_ERRORS)
+        iprintd("spi %d overrun\n", port);
+#endif // SPI_DEBUG_ERRORS
+    }
+
+    if(__SPI_REGS[port]->SR & SPI_SR_MODF)
+    {
+#if (SPI_DEBUG_ERRORS)
+        iprintd("spi %d mode fault\n", port);
+#endif // SPI_DEBUG_ERRORS
+    }
+
+    if(__SPI_REGS[port]->SR & SPI_SR_BSY)
+    {
+#if (SPI_DEBUG_ERRORS)
+        iprintd("spi %d busy\n", port);
+#endif // SPI_DEBUG_ERRORS
+    }
+
+    if(__SPI_REGS[port]->SR & SPI_SR_UDR)
+    {
+#if (SPI_DEBUG_ERRORS)
+        iprintd("spi %d underrun\n", port);
+#endif // SPI_DEBUG_ERRORS
+    }
+
+    if(__SPI_REGS[port]->SR & SPI_SR_TXE)
+    {
+#if (SPI_DEBUG_ERRORS)
+        iprintd("spi %d txe\n", port);
+#endif // SPI_DEBUG_ERRORS
+    }
+
+    if(__SPI_REGS[port]->SR & SPI_SR_RXNE)
+    {
+#if (SPI_DEBUG_ERRORS)
+        iprintd("spi %d rxne\n", port);
+#endif // SPI_DEBUG_ERRORS
+    }
+}
+
+static inline void stm32_spi_on_rx_isr(SPI* spi, SPI_PORT port)
+{
+    *(uint8_t*)(io_data(spi->io) + spi->rx_length) = __SPI_REGS[port]->DR;
+    spi->rx_length++;
+
+    if(spi->io->data_size == spi->rx_length)
+    {
+        spi->io->data_size = spi->rx_length;
+        iio_complete(spi->process, HAL_IO_CMD(HAL_SPI, IPC_READ), port, spi->io);
+    }
+}
+
+static inline void stm32_spi_on_tx_isr(SPI* spi, SPI_PORT port)
+{
+    if(spi->tx_length-- > 0)
+        __SPI_REGS[port]->DR = *(uint8_t*)(io_data(spi->io) + (spi->io->data_size - spi->tx_length));
 }
 
 void stm32_spi_on_isr(int vector, void* param)
 {
+    SPI_PORT port;
+    SPI* spi;
+    EXO* exo = param;
+    port = SPI_1;
+#if (SPI_COUNT > 1)
+    if (vector != __SPI_VECTORS[0])
+        port = SPI_2;
+#endif
+    spi = exo->spi.spis[port];
 
+    if (__SPI_REGS[port]->SR & (SPI_SR_OVR | SPI_SR_MODF | SPI_SR_BSY))
+    {
+        stm32_spi_on_status_isr(spi, port);
+    }
+
+    if(__SPI_REGS[port]->SR & SPI_SR_TXE)
+    {
+        stm32_spi_on_tx_isr(spi, port);
+    }
+
+    if(__SPI_REGS[port]->SR & SPI_SR_RXNE)
+    {
+        stm32_spi_on_rx_isr(spi, port);
+    }
 }
 
-void stm32_spi_open(EXO* exo, SPI_PORT port, uint32_t mode, uint32_t cs_pin)
+void stm32_spi_open(EXO* exo, SPI_PORT port, unsigned int settings)
 {
     SPI* spi = exo->spi.spis[port];
-    uint32_t cr1;
     if (spi)
     {
         error(ERROR_ALREADY_CONFIGURED);
         return;
     }
+
     spi = kmalloc(sizeof(SPI));
-    exo->spi.spis[port] = spi;
     if (spi == NULL)
     {
         error(ERROR_OUT_OF_MEMORY);
         return;
     }
+    exo->spi.spis[port] = spi;
 
-    //enable clock
-    if (port == SPI_1 )
-        RCC->APB2ENR |= 1 << __SPI_POWER_PINS[port];
-    else
-        RCC->APB1ENR |= 1 << __SPI_POWER_PINS[port];
+    spi->io = NULL;
+    stm32_spi_enable(__SPI_REGS[port], false);
+    // Enable clocking
+    switch(port)
+    {
+        case SPI_1:
+            RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+            break;
+        case SPI_2:
+            RCC->APB1ENR |= RCC_APB1ENR_SPI2EN;
+            break;
+        default:
+        {
+            error(ERROR_HARDWARE);
+            return;
+        }
+    }
 
-    spi->cs_pin = cs_pin;
-    cr1=0;// | SPI_CR1_MSTR;// | SPI_CR1_SPE;
-    if(mode & SPI_LSBFIRST_MSK) cr1 |= SPI_CR1_LSBFIRST;
-    if(mode & SPI_CPOL_MSK)     cr1 |= SPI_CR1_CPOL;
-    if(mode & SPI_CPHA_MSK)     cr1 |= SPI_CR1_CPHA;
+    __SPI_REGS[port]->SR = SPI_SR_TXE;
+    __SPI_REGS[port]->CR1 = settings;
+    __SPI_REGS[port]->CR2 = SPI_CR2_ERRIE;
+    __SPI_REGS[port]->I2SCFGR &= ~((uint16_t)SPI_I2SCFGR_I2SMOD); // Disable I2S
+    stm32_spi_enable(__SPI_REGS[port], true);
 
-/*    SPI1->CR1 =SPI_CR1_MSTR |((mode & 0x07) << 3);
-    __SPI_REGS[port]->CR1 |= cr1 ;
-
-    SPI1->CR2 =SPI_CR2_SSOE |SPI_CR2_RXNEIE |SPI_CR2_FRXTH
-            |SPI_CR2_DS_3 |SPI_CR2_DS_2 |SPI_CR2_DS_1 |SPI_CR2_DS_0;
-    SPI1->CR1 |=SPI_CR1_SPE;
-*/
-
-    __SPI_REGS[port]->CR1 |= ((mode & 0x07) << 3) | SPI_CR1_MSTR;
-    __SPI_REGS[port]->CR1 |= cr1 ;
-    __SPI_REGS[port]->CR2 = (mode & 0x0F00)| SPI_CR2_SSOE ;
-    __SPI_REGS[port]->CR1 |=  SPI_CR1_SPE;
-
-    //enable interrupt
-//    kirq_register(KERNEL_HANDLE, __SPI_VECTORS[port], stm32_spi_on_isr, (void*)exo);
-//    NVIC_EnableIRQ(__I2C_VECTORS[port]);
-//    NVIC_SetPriority(__I2C_VECTORS[port], 13);
+    kirq_register(KERNEL_HANDLE, __SPI_VECTORS[port], stm32_spi_on_isr, (void*)exo);
+    NVIC_SetPriority(__SPI_VECTORS[port], 13);
+    NVIC_EnableIRQ(__SPI_VECTORS[port]);
 }
 
 void stm32_spi_close(EXO* exo, SPI_PORT port)
 {
     SPI* spi = exo->spi.spis[port];
-    if (spi == NULL)
+    if (!spi)
     {
         error(ERROR_NOT_CONFIGURED);
         return;
     }
-    //disable interrupt
-//    NVIC_DisableIRQ(__SPI_VECTORS[port]);
-//    kirq_unregister(KERNEL_HANDLE, __SPI_VECTORS[port]);
 
-    __SPI_REGS[port]->CR1 &= ~SPI_CR1_SPE;
-    if (port == SPI_1)
-        RCC->APB2ENR &= ~(1 << __SPI_POWER_PINS[port]);
-    else
-        RCC->APB1ENR &= ~(1 << __SPI_POWER_PINS[port]);
+    NVIC_DisableIRQ(__SPI_VECTORS[port]);
+    kirq_unregister(KERNEL_HANDLE, __SPI_VECTORS[port]);
 
+    stm32_spi_enable(__SPI_REGS[port], false);
+    // Disable clocking
+    switch(port)
+    {
+        case SPI_1:
+            RCC->APB2ENR &= ~RCC_APB2ENR_SPI1EN;
+            break;
+        case SPI_2:
+            RCC->APB1ENR &= ~RCC_APB1ENR_SPI2EN;
+            break;
+        default:
+        {
+            error(ERROR_HARDWARE);
+            return;
+        }
+    }
+
+    spi->io = NULL;
     kfree(spi);
     exo->spi.spis[port] = NULL;
 }
 
-static uint16_t spi_write(SPI_PORT port, uint16_t data)
+void stm32_spi_byte(EXO* exo, IPC* ipc)
 {
-    __SPI_REGS[port]->DR = data;
-    while((__SPI_REGS[port]->SR & SPI_SR_RXNE) == 0);
-    return __SPI_REGS[port]->DR;
-}
+    SPI_PORT port = (SPI_PORT)ipc->param1;
+    uint8_t byte = (uint8_t)ipc->param2;
 
-void stm32_spi_write(EXO* exo, IPC* ipc, SPI_PORT port)
-{
-    uint32_t size = (ipc->param1 >> 8) & 0xFF;
     SPI* spi = exo->spi.spis[port];
     if (spi == NULL)
     {
         error(ERROR_NOT_CONFIGURED);
         return;
     }
-    ipc->param3 = spi_write(port, ipc->param3);
-    if(size < 2) return;
-    ipc->param2 = spi_write(port, ipc->param2);
-    if(size < 3) return;
-    ipc->param1 = spi_write(port, ipc->param1 >> 16);
 
+    __SPI_REGS[port]->DR = byte;
+    while(!(__SPI_REGS[port]->SR & SPI_SR_RXNE));
+    byte = __SPI_REGS[port]->DR;
+    ipc->param2 = byte;
 }
+
+//static void stm32_spi_data_io(EXO* exo, IPC* ipc)
+//{
+//    SPI_PORT port = (SPI_PORT)ipc->param1;
+//    unsigned int max_size = ipc->param3;
+//    SPI* spi = core->spi.spis[port];
+//    if (spi == NULL)
+//    {
+//        error(ERROR_NOT_CONFIGURED);
+//        return;
+//    }
+//    spi->process = ipc->process;
+//    spi->io = (IO*)ipc->param2;
+//    spi->tx_length = spi->io->data_size;
+//    spi->rx_length = 0;
+//
+//    if(spi->tx_length > max_size)
+//        spi->tx_length = max_size;
+//
+//    __SPI_REGS[port]->DR = *(uint8_t*)io_data(spi->io);
+//    spi->tx_length--;
+//    //all rest in isr
+//    error(ERROR_SYNC);
+//}
 
 void stm32_spi_request(EXO* exo, IPC* ipc)
 {
-    SPI_PORT port = (SPI_PORT)(ipc->param1 & 0xFF);
+    SPI_PORT port = (SPI_PORT)ipc->param1;
     if (port >= SPI_COUNT)
     {
         error(ERROR_INVALID_PARAMS);
         return;
     }
+
     switch (HAL_ITEM(ipc->cmd))
     {
-    case IPC_OPEN:
-        stm32_spi_open(exo, port, ipc->param2, ipc->param3);
-        break;
-    case IPC_CLOSE:
-        stm32_spi_close(exo, port);
-    case IPC_WRITE:
-        stm32_spi_write(exo, ipc, port);
-        break;
-    default:
-        error(ERROR_NOT_SUPPORTED);
-        break;
+        case IPC_OPEN:
+            stm32_spi_open(exo, port, ipc->param2);
+            break;
+        case IPC_CLOSE:
+            stm32_spi_close(exo, port);
+            break;
+        case SPI_BYTE:
+            stm32_spi_byte(exo, ipc);
+            break;
+        case SPI_SEND_DATA:
+            break;
+        case SPI_GET_DATA:
+            break;
+        default:
+            error(ERROR_NOT_SUPPORTED);
+            break;
     }
 }

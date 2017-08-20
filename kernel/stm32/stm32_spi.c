@@ -104,10 +104,6 @@ static inline void stm32_spi_on_rx_isr(SPI* spi, SPI_PORT port)
         return;
     }
 
-#if (SPI_DEBUG)
-    iprintd("<i- %02X, rx: %d\n", byte, spi->rx_length);
-#endif // SPI_DEBUG
-
     *(uint8_t*)(io_data(spi->io) + spi->io->data_size++) = byte;
     spi->rx_length--;
 }
@@ -132,9 +128,6 @@ static inline void stm32_spi_on_tx_isr(SPI* spi, SPI_PORT port)
     }
 
     byte = *(uint8_t*)(io_data(spi->io) + (spi->io->data_size - spi->tx_length));
-#if (SPI_DEBUG)
-    iprintd("-i> %02X\n", byte);
-#endif // SPI_DEBUG
     __SPI_REGS[port]->DR = byte;
 }
 
@@ -224,9 +217,7 @@ void stm32_spi_close(EXO* exo, SPI_PORT port)
         error(ERROR_NOT_CONFIGURED);
         return;
     }
-
     kirq_unregister(KERNEL_HANDLE, __SPI_VECTORS[port]);
-
     stm32_spi_enable(__SPI_REGS[port], false);
     // Disable clocking
     switch(port)
@@ -297,28 +288,15 @@ static void stm32_spi_data_io(EXO* exo, IPC* ipc, bool read)
 //    if(spi->tx_length > max_size)
 //        spi->tx_length = max_size;
 
-#if (SPI_DEBUG)
-    if(read)
-        iprintd("read %d\n", spi->rx_length);
-    else
-        iprintd("send %d\n", spi->tx_length);
-#endif
-
-
     if(read)
         __SPI_REGS[port]->DR = 0x00;
     else
-    {
-#if (SPI_DEBUG)
-        iprintd("-i> %02X\n", *(uint8_t*)io_data(spi->io));
-#endif // SPI_DEBUG
         __SPI_REGS[port]->DR = *(uint8_t*)io_data(spi->io);
-    }
+
 
     __SPI_REGS[port]->CR2 |= SPI_CR2_TXEIE;
     if(read)
         __SPI_REGS[port]->CR2 |= SPI_CR2_RXNEIE;
-
     //all rest in isr
     NVIC_EnableIRQ(__SPI_VECTORS[port]);
     error(ERROR_SYNC);

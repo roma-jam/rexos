@@ -14,11 +14,18 @@
 #include "../../userspace/process.h"
 #include <stdbool.h>
 
+typedef enum {
+    SPI_MODE_IDLE = 0,
+    SPI_MODE_TX,
+    SPI_MODE_RX
+} SPI_MODE;
+
 typedef struct  {
     IO* io;
     HANDLE process;
+    SPI_MODE mode;
     int tx_length;
-    unsigned int rx_length;
+    int rx_length;
 } SPI;
 
 typedef struct  {

@@ -42,8 +42,6 @@
 
 typedef enum {
     SPI_BYTE = IPC_USER,
-    SPI_SEND_DATA,
-    SPI_GET_DATA,
     SPI_IPC_MAX
 } SPI_IPCS;
 
@@ -51,8 +49,8 @@ bool spi_open(int port, unsigned int settings);
 void spi_close(int port);
 
 unsigned int spi_byte(int port, uint8_t byte);
-unsigned int spi_send_data(int port, IO* io);
-unsigned int spi_get_data(int port, IO* io);
+unsigned int spi_write_data(int port, IO* io);
+unsigned int spi_read_data(int port, IO* io, unsigned int size);
 
 //typedef enum {
 //    SPI_MSBFIRST = 0,

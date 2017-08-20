@@ -15,6 +15,8 @@
 #include "../kstdlib.h"
 #include "../kirq.h"
 
+#include "../../CMSIS/Device/ST/STM32L1xx/Include/stm32l151xc.h"
+
 typedef SPI_TypeDef* SPI_TypeDef_P;
 #if (SPI_COUNT > 1)
 static const SPI_TypeDef_P __SPI_REGS[] =                               {SPI1, SPI2};
@@ -88,22 +90,52 @@ static void stm32_spi_on_status_isr(SPI* spi, SPI_PORT port)
 
 static inline void stm32_spi_on_rx_isr(SPI* spi, SPI_PORT port)
 {
-    *(uint8_t*)(io_data(spi->io) + spi->rx_length) = __SPI_REGS[port]->DR;
-    spi->rx_length++;
+    uint8_t byte = __SPI_REGS[port]->DR;
 
-    if(spi->io->data_size == spi->rx_length)
+    if(spi->mode != SPI_MODE_RX)
+        return;
+
+    if(spi->rx_length == 0)
     {
-        spi->io->data_size = spi->rx_length;
         __SPI_REGS[port]->CR2 &= ~SPI_CR2_TXEIE;
         __SPI_REGS[port]->CR2 &= ~SPI_CR2_RXNEIE;
+        NVIC_DisableIRQ(__SPI_VECTORS[port]);
         iio_complete(spi->process, HAL_IO_CMD(HAL_SPI, IPC_READ), port, spi->io);
+        return;
     }
+
+#if (SPI_DEBUG)
+    iprintd("<i- %02X, rx: %d\n", byte, spi->rx_length);
+#endif // SPI_DEBUG
+
+    *(uint8_t*)(io_data(spi->io) + spi->io->data_size++) = byte;
+    spi->rx_length--;
 }
 
 static inline void stm32_spi_on_tx_isr(SPI* spi, SPI_PORT port)
 {
-    if(spi->tx_length-- > 0)
-        __SPI_REGS[port]->DR = *(uint8_t*)(io_data(spi->io) + (spi->io->data_size - spi->tx_length));
+    uint8_t byte;
+
+    if(spi->mode != SPI_MODE_TX)
+    {
+        __SPI_REGS[port]->DR = 0x00;
+        return;
+    }
+
+    if(--spi->tx_length == 0)
+    {
+        __SPI_REGS[port]->CR2 &= ~SPI_CR2_TXEIE;
+        __SPI_REGS[port]->CR2 &= ~SPI_CR2_RXNEIE;
+        NVIC_DisableIRQ(__SPI_VECTORS[port]);
+        iio_complete(spi->process, HAL_IO_CMD(HAL_SPI, IPC_WRITE), port, spi->io);
+        return;
+    }
+
+    byte = *(uint8_t*)(io_data(spi->io) + (spi->io->data_size - spi->tx_length));
+#if (SPI_DEBUG)
+    iprintd("-i> %02X\n", byte);
+#endif // SPI_DEBUG
+    __SPI_REGS[port]->DR = byte;
 }
 
 void stm32_spi_on_isr(int vector, void* param)
@@ -117,21 +149,22 @@ void stm32_spi_on_isr(int vector, void* param)
         port = SPI_2;
 #endif
     spi = exo->spi.spis[port];
-    iprintd("i\n");
-
-    if (__SPI_REGS[port]->SR & (SPI_SR_OVR | SPI_SR_MODF | SPI_SR_BSY))
-    {
-        stm32_spi_on_status_isr(spi, port);
-    }
 
     if(__SPI_REGS[port]->SR & SPI_SR_TXE)
     {
         stm32_spi_on_tx_isr(spi, port);
+        return;
     }
 
     if(__SPI_REGS[port]->SR & SPI_SR_RXNE)
     {
         stm32_spi_on_rx_isr(spi, port);
+        return;
+    }
+
+    if (__SPI_REGS[port]->SR & (SPI_SR_OVR | SPI_SR_MODF | SPI_SR_BSY))
+    {
+        stm32_spi_on_status_isr(spi, port);
     }
 }
 
@@ -152,7 +185,10 @@ void stm32_spi_open(EXO* exo, SPI_PORT port, unsigned int settings)
     }
     exo->spi.spis[port] = spi;
 
+    spi->process = INVALID_HANDLE;
     spi->io = NULL;
+    spi->tx_length = spi->rx_length = 0;
+    spi->mode = SPI_MODE_IDLE;
     stm32_spi_enable(__SPI_REGS[port], false);
     // Enable clocking
     switch(port)
@@ -178,7 +214,6 @@ void stm32_spi_open(EXO* exo, SPI_PORT port, unsigned int settings)
 
     kirq_register(KERNEL_HANDLE, __SPI_VECTORS[port], stm32_spi_on_isr, (void*)exo);
     NVIC_SetPriority(__SPI_VECTORS[port], 13);
-    NVIC_EnableIRQ(__SPI_VECTORS[port]);
 }
 
 void stm32_spi_close(EXO* exo, SPI_PORT port)
@@ -190,7 +225,6 @@ void stm32_spi_close(EXO* exo, SPI_PORT port)
         return;
     }
 
-    NVIC_DisableIRQ(__SPI_VECTORS[port]);
     kirq_unregister(KERNEL_HANDLE, __SPI_VECTORS[port]);
 
     stm32_spi_enable(__SPI_REGS[port], false);
@@ -233,11 +267,12 @@ void stm32_spi_byte(EXO* exo, IPC* ipc)
     ipc->param2 = byte;
 }
 
-static void stm32_spi_data_io(EXO* exo, IPC* ipc)
+static void stm32_spi_data_io(EXO* exo, IPC* ipc, bool read)
 {
-    iprintd("spi io\n");
     SPI_PORT port = (SPI_PORT)ipc->param1;
     SPI* spi = exo->spi.spis[port];
+    uint32_t size = ipc->param3;
+
     if (spi == NULL)
     {
         error(ERROR_NOT_CONFIGURED);
@@ -246,15 +281,46 @@ static void stm32_spi_data_io(EXO* exo, IPC* ipc)
 
     spi->process = ipc->process;
     spi->io = (IO*)ipc->param2;
-    spi->tx_length = spi->io->data_size;
-    spi->rx_length = 0;
+    spi->rx_length = spi->tx_length = 0;
+    if(read)
+    {
+        spi->mode = SPI_MODE_RX;
+        spi->io->data_size = 0;
+        spi->rx_length = size;
+    }
+    else
+    {
+        spi->mode = SPI_MODE_TX;
+        spi->tx_length = spi->io->data_size;
+    }
 
 //    if(spi->tx_length > max_size)
 //        spi->tx_length = max_size;
-    iprintd("send %u bytes\n", spi->tx_length);
-    __SPI_REGS[port]->DR = *(uint8_t*)io_data(spi->io);
-    spi->tx_length--;
+
+#if (SPI_DEBUG)
+    if(read)
+        iprintd("read %d\n", spi->rx_length);
+    else
+        iprintd("send %d\n", spi->tx_length);
+#endif
+
+
+    if(read)
+        __SPI_REGS[port]->DR = 0x00;
+    else
+    {
+#if (SPI_DEBUG)
+        iprintd("-i> %02X\n", *(uint8_t*)io_data(spi->io));
+#endif // SPI_DEBUG
+        __SPI_REGS[port]->DR = *(uint8_t*)io_data(spi->io);
+    }
+
+    __SPI_REGS[port]->CR2 |= SPI_CR2_TXEIE;
+    if(read)
+        __SPI_REGS[port]->CR2 |= SPI_CR2_RXNEIE;
+
     //all rest in isr
+    NVIC_EnableIRQ(__SPI_VECTORS[port]);
     error(ERROR_SYNC);
 }
 
@@ -275,12 +341,14 @@ void stm32_spi_request(EXO* exo, IPC* ipc)
         case IPC_CLOSE:
             stm32_spi_close(exo, port);
             break;
+        case IPC_WRITE:
+            stm32_spi_data_io(exo, ipc, false);
+            break;
+        case IPC_READ:
+            stm32_spi_data_io(exo, ipc, true);
+            break;
         case SPI_BYTE:
             stm32_spi_byte(exo, ipc);
-            break;
-        case SPI_SEND_DATA:
-        case SPI_GET_DATA:
-            stm32_spi_data_io(exo, ipc);
             break;
         default:
             error(ERROR_NOT_SUPPORTED);

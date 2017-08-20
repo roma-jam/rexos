@@ -94,6 +94,8 @@ static inline void stm32_spi_on_rx_isr(SPI* spi, SPI_PORT port)
     if(spi->io->data_size == spi->rx_length)
     {
         spi->io->data_size = spi->rx_length;
+        __SPI_REGS[port]->CR2 &= ~SPI_CR2_TXEIE;
+        __SPI_REGS[port]->CR2 &= ~SPI_CR2_RXNEIE;
         iio_complete(spi->process, HAL_IO_CMD(HAL_SPI, IPC_READ), port, spi->io);
     }
 }
@@ -115,6 +117,7 @@ void stm32_spi_on_isr(int vector, void* param)
         port = SPI_2;
 #endif
     spi = exo->spi.spis[port];
+    iprintd("i\n");
 
     if (__SPI_REGS[port]->SR & (SPI_SR_OVR | SPI_SR_MODF | SPI_SR_BSY))
     {
@@ -167,7 +170,7 @@ void stm32_spi_open(EXO* exo, SPI_PORT port, unsigned int settings)
         }
     }
 
-    __SPI_REGS[port]->SR = SPI_SR_TXE;
+    __SPI_REGS[port]->SR = SPI_SR_TXE | SPI_SR_RXNE;
     __SPI_REGS[port]->CR1 = settings;
     __SPI_REGS[port]->CR2 = SPI_CR2_ERRIE;
     __SPI_REGS[port]->I2SCFGR &= ~((uint16_t)SPI_I2SCFGR_I2SMOD); // Disable I2S
@@ -230,29 +233,30 @@ void stm32_spi_byte(EXO* exo, IPC* ipc)
     ipc->param2 = byte;
 }
 
-//static void stm32_spi_data_io(EXO* exo, IPC* ipc)
-//{
-//    SPI_PORT port = (SPI_PORT)ipc->param1;
-//    unsigned int max_size = ipc->param3;
-//    SPI* spi = core->spi.spis[port];
-//    if (spi == NULL)
-//    {
-//        error(ERROR_NOT_CONFIGURED);
-//        return;
-//    }
-//    spi->process = ipc->process;
-//    spi->io = (IO*)ipc->param2;
-//    spi->tx_length = spi->io->data_size;
-//    spi->rx_length = 0;
-//
+static void stm32_spi_data_io(EXO* exo, IPC* ipc)
+{
+    iprintd("spi io\n");
+    SPI_PORT port = (SPI_PORT)ipc->param1;
+    SPI* spi = exo->spi.spis[port];
+    if (spi == NULL)
+    {
+        error(ERROR_NOT_CONFIGURED);
+        return;
+    }
+
+    spi->process = ipc->process;
+    spi->io = (IO*)ipc->param2;
+    spi->tx_length = spi->io->data_size;
+    spi->rx_length = 0;
+
 //    if(spi->tx_length > max_size)
 //        spi->tx_length = max_size;
-//
-//    __SPI_REGS[port]->DR = *(uint8_t*)io_data(spi->io);
-//    spi->tx_length--;
-//    //all rest in isr
-//    error(ERROR_SYNC);
-//}
+    iprintd("send %u bytes\n", spi->tx_length);
+    __SPI_REGS[port]->DR = *(uint8_t*)io_data(spi->io);
+    spi->tx_length--;
+    //all rest in isr
+    error(ERROR_SYNC);
+}
 
 void stm32_spi_request(EXO* exo, IPC* ipc)
 {
@@ -275,8 +279,8 @@ void stm32_spi_request(EXO* exo, IPC* ipc)
             stm32_spi_byte(exo, ipc);
             break;
         case SPI_SEND_DATA:
-            break;
         case SPI_GET_DATA:
+            stm32_spi_data_io(exo, ipc);
             break;
         default:
             error(ERROR_NOT_SUPPORTED);

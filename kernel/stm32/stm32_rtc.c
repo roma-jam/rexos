@@ -5,13 +5,14 @@
 */
 
 #include "stm32_rtc.h"
-#include "stm32_config.h"
-#include "../../userspace/rtc.h"
 #include "stm32_exo_private.h"
+#include "stm32_config.h"
+#include "../ksystime.h"
+#include "../kirq.h"
+#include "../../userspace/rtc.h"
 #include "sys_config.h"
 #include "../../userspace/sys.h"
 #include "../../userspace/time.h"
-#include "../kirq.h"
 #include "../../userspace/systime.h"
 #include "../../userspace/stdio.h"
 
@@ -43,7 +44,7 @@ void stm32_rtc_isr(int vector, void* param)
     EXTI->PR |= (1 << RTC_EXTI_LINE);
 #endif
 
-    systime_second_pulse();
+    ksystime_second_pulse();
 }
 
 static inline void stm32_backup_on()

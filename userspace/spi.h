@@ -51,8 +51,8 @@ bool spi_open(int port, unsigned int settings);
 void spi_close(int port);
 
 unsigned int spi_byte(int port, uint8_t byte);
-unsigned int spi_send_data(int port, uint8_t* data, unsigned int data_size);
-unsigned int spi_get_data(int port, uint8_t* data);
+unsigned int spi_send_data(int port, IO* io);
+unsigned int spi_get_data(int port, IO* io);
 
 //typedef enum {
 //    SPI_MSBFIRST = 0,

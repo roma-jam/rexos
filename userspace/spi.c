@@ -26,14 +26,14 @@ unsigned int spi_byte(int port, uint8_t byte)
     return get_exo(HAL_REQ(HAL_SPI, SPI_BYTE), port, byte, 0);
 }
 
-unsigned int spi_send_data(int port, uint8_t* data, unsigned int data_size)
+unsigned int spi_send_data(int port, IO* io)
 {
-    return io_read_sync_exo(HAL_REQ(HAL_SPI, SPI_SEND_DATA), port, data, data_size);
+    return io_read_sync_exo(HAL_REQ(HAL_SPI, SPI_SEND_DATA), port, (unsigned int)io, io->data_size);
 }
 
-unsigned int spi_get_data(int port, uint8_t* data)
+unsigned int spi_get_data(int port, IO* io)
 {
-    return io_read_sync_exo(HAL_REQ(HAL_SPI, SPI_GET_DATA), port, data, 0);
+    return io_read_sync_exo(HAL_REQ(HAL_SPI, SPI_GET_DATA), port, (unsigned int)io, 0);
 }
 #else
 bool spi_open(int port, unsigned int settings)

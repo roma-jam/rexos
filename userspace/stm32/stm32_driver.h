@@ -35,6 +35,8 @@ typedef enum {
 typedef enum {
     STM32_CLOCK_APB1 = POWER_CLOCK_MAX,
     STM32_CLOCK_APB2,
+    POWER_CLOCK_APB3,
+    POWER_CLOCK_APB4,
     STM32_CLOCK_ADC
 } STM32_POWER_CLOCKS;
 
@@ -123,7 +125,7 @@ typedef enum {
 }STM32_GPIO_MODE;
 
 #elif defined(STM32F0) || defined(STM32F2) || defined(STM32F4) || defined(STM32L0) \
-    || defined(STM32L1)
+    || defined(STM32L1) || defined(STM32H7)
 
 #define STM32_GPIO_MODE_INPUT                   (0x0 << 0)
 #define STM32_GPIO_MODE_OUTPUT                  (0x1 << 0)

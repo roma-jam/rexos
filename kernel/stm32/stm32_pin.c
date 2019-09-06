@@ -46,7 +46,24 @@ const GPIO_TypeDef_P GPIO[8] =                                  {GPIOA, GPIOB, G
 const GPIO_TypeDef_P GPIO[4] =                                  {GPIOA, GPIOB, GPIOC, GPIOD};
 static const unsigned int GPIO_POWER_PINS[GPIO_COUNT] =         {0, 1, 2, 3};
 #define GPIO_POWER_PORT                                         RCC->AHBENR
+#elif defined(STM32H7)
+const GPIO_TypeDef_P GPIO[GPIO_COUNT] =                         {GPIOA, GPIOB, GPIOC, GPIOD, GPIOE, GPIOF, GPIOG, GPIOH, GPIOI, GPIOJ, GPIOK};
+static const unsigned int GPIO_POWER_PINS[GPIO_COUNT] =         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+#define GPIO_POWER_PORT                                         RCC->AHB4ENR
 #endif
+
+
+#if defined(STM32H7)
+#define EXTI_RTSR_REG                       (EXTI->RTSR1)
+#define EXTI_FTSR_REG                       (EXTI->FTSR1)
+#define EXTI_IMR_REG                        (EXTI->IMR1)
+#define EXTI_EMR_REG                        (EXTI->EMR1)
+#else
+#define EXTI_RTSR_REG                       (EXTI->RTSR)
+#define EXTI_FTSR_REG                       (EXTI->FTSR)
+#define EXTI_IMR_REG                        (EXTI->IMR)
+#define EXTI_EMR_REG                        (EXTI->EMR)
+#endif //
 
 #if defined(STM32F1)
 #define GPIO_CR(pin)                                            (*((unsigned int*)((unsigned int)(GPIO[GPIO_PORT(pin)]) + 4 * ((GPIO_PIN(pin)) / 8))))
@@ -104,18 +121,21 @@ void stm32_gpio_enable_exti(GPIO_DRV* gpio, PIN pin, unsigned int flags)
 #if defined(STM32F1)
     AFIO->EXTICR[GPIO_PIN(pin) / 4] &= ~(0xful << (uint32_t)(GPIO_PIN(pin) & 3ul));
     AFIO->EXTICR[GPIO_PIN(pin) / 4] |= ((uint32_t)GPIO_PORT(pin) << (uint32_t)(GPIO_PIN(pin) & 3ul));
+#elif defined(STM32H7)
+
 #else
     SYSCFG->EXTICR[GPIO_PIN(pin) / 4] &= ~(0xful << (uint32_t)(GPIO_PIN(pin) & 3ul));
     SYSCFG->EXTICR[GPIO_PIN(pin) / 4] |= ((uint32_t)GPIO_PORT(pin) << (uint32_t)(GPIO_PIN(pin) & 3ul));
 #endif
-    EXTI->RTSR &= ~(1ul << GPIO_PIN(pin));
-    EXTI->FTSR &= ~(1ul << GPIO_PIN(pin));
+
+    EXTI_RTSR_REG &= ~(1ul << GPIO_PIN(pin));
+    EXTI_FTSR_REG &= ~(1ul << GPIO_PIN(pin));
     if (flags & EXTI_FLAGS_RISING)
-        EXTI->RTSR |= 1ul << GPIO_PIN(pin);
+        EXTI_RTSR_REG |= 1ul << GPIO_PIN(pin);
     if (flags & EXTI_FLAGS_FALLING)
-        EXTI->FTSR |= 1ul << GPIO_PIN(pin);
-    EXTI->IMR |= 1ul << GPIO_PIN(pin);
-    EXTI->EMR |= 1ul << GPIO_PIN(pin);
+        EXTI_FTSR_REG |= 1ul << GPIO_PIN(pin);
+    EXTI_IMR_REG |= 1ul << GPIO_PIN(pin);
+    EXTI_EMR_REG |= 1ul << GPIO_PIN(pin);
 }
 
 void stm32_gpio_disable_pin(GPIO_DRV* gpio, PIN pin)
@@ -143,11 +163,11 @@ void stm32_gpio_disable_pin(GPIO_DRV* gpio, PIN pin)
 
 void stm32_gpio_disable_exti(GPIO_DRV* gpio, PIN pin)
 {
-    EXTI->IMR &= ~(1ul << GPIO_PIN(pin));
-    EXTI->EMR &= ~(1ul << GPIO_PIN(pin));
+    EXTI_IMR_REG &= ~(1ul << GPIO_PIN(pin));
+    EXTI_EMR_REG &= ~(1ul << GPIO_PIN(pin));
 
-    EXTI->RTSR &= ~(1ul << GPIO_PIN(pin));
-    EXTI->FTSR &= ~(1ul << GPIO_PIN(pin));
+    EXTI_RTSR_REG &= ~(1ul << GPIO_PIN(pin));
+    EXTI_FTSR_REG &= ~(1ul << GPIO_PIN(pin));
 }
 
 void stm32_pin_init(EXO* exo)

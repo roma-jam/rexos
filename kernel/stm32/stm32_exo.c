@@ -47,7 +47,7 @@ void exodriver_post(IPC* ipc)
         stm32_pin_request(__KERNEL->exo, ipc);
         break;
     case HAL_TIMER:
-        stm32_timer_request(__KERNEL->exo, ipc);
+//        stm32_timer_request(__KERNEL->exo, ipc);
         break;
 #if (STM32_RTC_DRIVER)
     case HAL_RTC:
@@ -128,7 +128,7 @@ void exodriver_init()
     stm32_wdt_pre_init();
 #endif //STM32_WDT_DRIVER
     stm32_power_init(__KERNEL->exo);
-    stm32_timer_init(__KERNEL->exo);
+//    stm32_timer_init(__KERNEL->exo);
     stm32_pin_init(__KERNEL->exo);
 #if (STM32_RTC_DRIVER)
     stm32_rtc_init();

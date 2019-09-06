@@ -75,16 +75,31 @@ static const unsigned int UART_VECTORS[3] =                 {27, 28, 29};
 static const unsigned int UART_POWER_PINS[UARTS_COUNT] =    {14, 17, 18, 19, 20, 5, 6, 7};
 static const USART_TypeDef_P UART_REGS[UARTS_COUNT]=        {USART1, USART2, USART3, USART4, USART5, USART6, USART7, USART8};
 #endif //UARTS_COUNT
+#elif defined(STM32H7)
+#if ((UARTS_COUNT) == 4)
+static const unsigned int UART_VECTORS[UARTS_COUNT] =       {37, 38, 39, 52};
+static const unsigned int UART_POWER_PINS[UARTS_COUNT] =    {4, 17, 18, 19};
+static const USART_TypeDef_P UART_REGS[UARTS_COUNT]=        {USART1, USART2, USART3, UART4};
+#elif ((UART_COUNTS) == 8)
+static const unsigned int UART_VECTORS[UARTS_COUNT] =       {37, 38, 39, 52, 53, 71, 82, 83};
+static const unsigned int UART_POWER_PINS[UARTS_COUNT] =    {4, 17, 18, 19, 20, 5, 30, 31};
+static const USART_TypeDef_P UART_REGS[UARTS_COUNT]=        {USART1, USART2, USART3, UART4, UART5, USART6, UART7, UART8};
 #endif
+#endif // STM32H7
 
-#if defined(STM32L0) || defined(STM32F0)
+#if defined(STM32L0) || defined(STM32F0) || defined(STM32H7)
+#if defined(STM32H7)
+#define USART_SR_TXE        USART_ISR_TXE_TXFNF
+#define USART_SR_RXNE       USART_ISR_RXNE_RXFNE
+#else
 #define USART_SR_TXE        USART_ISR_TXE
+#define USART_SR_RXNE       USART_ISR_RXNE
+#endif //
 #define USART_SR_TC         USART_ISR_TC
 #define USART_SR_PE         USART_ISR_PE
 #define USART_SR_FE         USART_ISR_FE
 #define USART_SR_NE         USART_ISR_NE
 #define USART_SR_ORE        USART_ISR_ORE
-#define USART_SR_RXNE       USART_ISR_RXNE
 #define SR(port)            (UART_REGS[(port)]->ISR)
 #define TXC(port, c)        (UART_REGS[(port)]->TDR = (c))
 #else
@@ -212,7 +227,7 @@ void stm32_uart_on_isr(int vector, void* param)
             exo->uart.uarts[port]->error = ERROR_OVERFLOW;
         else
         {
-#if defined(STM32L0) || defined(STM32F0)
+#if defined(STM32L0) || defined(STM32F0) || defined(STM32H7)
             __REG_RC32(UART_REGS[port]->RDR);
 #else
             __REG_RC32(UART_REGS[port]->DR);
@@ -245,7 +260,7 @@ void stm32_uart_on_isr(int vector, void* param)
     //receive data
     if (SR(port) & USART_SR_RXNE)
     {
-#if defined(STM32L0) || defined(STM32F0)
+#if defined(STM32L0) || defined(STM32F0) || defined(STM32H7)
         c = UART_REGS[port]->RDR;
 #else
         c = UART_REGS[port]->DR;
@@ -261,13 +276,8 @@ void uart_write_kernel(const char *const buf, unsigned int size, void* param)
     UART_REGS[(UART_PORT)param]->CR1 |= USART_CR1_TE;
     for(i = 0; i < size; ++i)
     {
-#if defined(STM32L0) || defined(STM32F0)
-        while ((UART_REGS[(UART_PORT)param]->ISR & USART_ISR_TXE) == 0) {}
-        UART_REGS[(UART_PORT)param]->TDR = buf[i];
-#else
-        while ((UART_REGS[(UART_PORT)param]->SR & USART_SR_TXE) == 0) {}
-        UART_REGS[(UART_PORT)param]->DR = buf[i];
-#endif
+        while((SR((UART_PORT)param) & USART_SR_TXE) == 0) {}
+        TXC((UART_PORT)param, buf[i]);
     }
     UART_REGS[(UART_PORT)param]->CR1 |= USART_CR1_TCIE;
     //transmitter will be disabled in next IRQ TC
@@ -415,7 +425,13 @@ static void stm32_uart_destroy(EXO* exo, UART_PORT port)
     if (port == UART_1 || port >= UART_6)
         RCC->APB2ENR &= ~(1 << UART_POWER_PINS[port]);
     else
+    {
+#if defined(STM32H7)
+        RCC->APB1LENR &= ~(1 << UART_POWER_PINS[port]);
+#else
         RCC->APB1ENR &= ~(1 << UART_POWER_PINS[port]);
+#endif //
+    }
 }
 
 static inline bool stm32_uart_open_stream(UART* uart, UART_PORT port, unsigned int mode)
@@ -489,7 +505,13 @@ static inline void stm32_uart_open(EXO* exo, UART_PORT port, unsigned int mode)
     if (port == UART_1 || port >= UART_6)
         RCC->APB2ENR |= 1 << UART_POWER_PINS[port];
     else
+    {
+#if defined(STM32H7)
+        RCC->APB1LENR |= 1 << UART_POWER_PINS[port];
+#else
         RCC->APB1ENR |= 1 << UART_POWER_PINS[port];
+#endif //
+    }
     UART_REGS[port]->CR1 = 0;
 
 #if (UART_IO_MODE_SUPPORT)

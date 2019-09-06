@@ -771,6 +771,87 @@
 #endif
 
 #endif
+//---------------------------------------------------------------------------- STM32 H7 ----------------------------------------------------------------------------------------------------------
+/* ALL LINES OF H7
+ * STM32H743VG, STM32H743ZG, STM32H743AG, STM32H743IG, STM32H743BG, STM32H743XG   - 1M/1M
+ * STM32H743VI, STM32H743ZI, STM32H743AI, STM32H743II, STM32H743BI, STM32H743XI   - 2M/1M
+ * STM32H753VI, STM32H753ZI, STM32H753AI, STM32H753II, STM32H753BI, STM32H753XI   - 2M/1M, crypto/hash
+ */
+#if defined(STM32H742VG) || defined(STM32H742ZG) || defined(STM32H742AG) || defined(STM32H742IG) || defined(STM32H742BG) || defined(STM32H742XG)
+#define STM32H742xG
+#endif
+
+#if defined(STM32H743VG) || defined(STM32H743ZG) || defined(STM32H743AG) || defined(STM32H743IG) || defined(STM32H743BG) || defined(STM32H743XG)
+#define STM32H743xG
+#endif
+
+#if defined(STM32H743VI) || defined(STM32H743ZI) || defined(STM32H743AI) || defined(STM32H743II) || defined(STM32H743BI) || defined(STM32H743XI)
+#define STM32H743xI
+#endif
+
+#if defined(STM32H753VI) || defined(STM32H753ZI) || defined(STM32H753AI) || defined(STM32H753II) || defined(STM32H753BI) || defined(STM32H753XI)
+#define STM32H753xI
+#endif
+
+#if defined(STM32H743xG) || defined(STM32H743xI)
+#define STM32H743xx
+#endif
+
+#if defined(STM32H743xG) || defined(STM32H742xG)
+//1M
+#define FLASH_SIZE          0x100000
+#elif defined(STM32H743xI) || defined(STM32H753xI)
+//2M
+/* defined in cmsis for m7 */
+//#define FLASH_SIZE          0x200000
+#endif
+
+#if defined(STM32H742xG)
+#define SRAM_SIZE           0x100000
+#elif defined(STM32H743xG) || defined(STM32H743xI) || defined(STM32H753xI)
+//128K Data Time Critical SRAM
+#define SRAM_DTCM_SIZE      0x20000
+//512K AXI SRAM
+#define SRAM_AXI_BASE       0x24000000
+#define SRAM_AXI_SIZE       0x80000
+//128K
+#define SRAM1_BASE          0x30000000
+#define SRAM1_SIZE          0x20000
+//128K
+#define SRAM2_BASE          0x30020000
+#define SRAM2_SIZE          0x20000
+//32K
+#define SRAM3_BASE          0x30040000
+#define SRAM3_SIZE          0x8000
+//64k
+#define SRAM4_BASE          0x38000000
+#define SRAM4_SIZE          0x10000
+//4K
+#define SRAM_BACKUP_BASE    0x38800000
+#define SRAM_BACKUP_SIZE    0x1000
+
+// Total SRAM size for stack
+/* SRAM BASE defined in core.h */
+#define SRAM_SIZE           SRAM_DTCM_SIZE
+
+#endif
+
+#if defined(STM32H742xG) || defined(STM32H743xG) || defined(STM32H743xI) || defined(STM32H753xI)
+#define STM32H7
+#endif
+
+#if defined(STM32H743ZI)
+#define EEPROM_SIZE         0x00
+#define TIM_COUNT           20
+#define SPI_COUNT           6
+#define I2C_COUNT           4
+#define UARTS_COUNT         4
+#define GPIO_COUNT          11
+#endif
+
+#if defined(STM32H743ZI)
+#define IRQ_VECTORS_COUNT   150
+#endif
 
 //---------------------------------------------------------------------------- STM32 L0 ----------------------------------------------------------------------------------------------------------
 #if defined(STM32L051C6) || defined(STM32L051C8) || defined(STM32L051K6) || defined(STM32L051K8) || defined(STM32L051R6) || defined(STM32L051R8) \
@@ -882,6 +963,13 @@
 #endif
 #endif //STM32L0 || STM32F0
 
+#if defined(STM32H7)
+#define STM32
+#ifndef CORTEX_M7
+#define CORTEX_M7
+#endif
+#endif // STM32H7
+
 #if defined(STM32)
 #define EXODRIVERS
 #ifndef FLASH_BASE
@@ -907,6 +995,8 @@
 #include "stm32f2xx.h"
 #elif defined(STM32F4)
 #include "stm32f4xx.h"
+#elif defined(STM32H7)
+#include "stm32h7xx.h"
 #elif defined(STM32L0)
 #include "stm32l0xx.h"
 #elif defined(STM32L1)

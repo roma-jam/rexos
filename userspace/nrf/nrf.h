@@ -10,8 +10,6 @@
 #ifndef NRF_H
 #define NRF_H
 
-#include "nrf_config.h"
-
 #if defined(NRF51822QFAA) || defined(NRF51822CEAA)
 #define NRF5122xxAA
 #endif // NRF51822QFAA || NRF51822CEAA
@@ -37,10 +35,11 @@
 #define FLASH_TOTAL_PAGE_CNT    0x100
 #endif // NRF5122xxAB
 
+#include "nrf_config.h"
+
 #if defined (NRF5122xxAC)
 #define SRAM_SIZE               0x8000
 #else
-
 #if (NRF_SRAM_POWER_CONFIG)
 #define SRAM_SIZE               0x2000
 #define SRAM_PART_COUNT         2

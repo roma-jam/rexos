@@ -17,8 +17,13 @@
 #include "../../userspace/power.h"
 #include <string.h>
 
+#if defined(STM32H7)
+#define APB1                                    (unsigned int*)((unsigned int)RCC_BASE + offsetof(RCC_TypeDef, APB1LENR))
+#define APB2                                    (unsigned int*)((unsigned int)RCC_BASE + offsetof(RCC_TypeDef, APB2ENR))
+#else
 #define APB1                                    (unsigned int*)((unsigned int)RCC_BASE + offsetof(RCC_TypeDef, APB1ENR))
 #define APB2                                    (unsigned int*)((unsigned int)RCC_BASE + offsetof(RCC_TypeDef, APB2ENR))
+#endif //
 
 typedef unsigned int*                           uint_p;
 typedef TIM_TypeDef*                            TIM_TypeDef_P;
@@ -93,7 +98,9 @@ const uint_p TIMER_POWER_PORT[TIMERS_COUNT] =   {APB2, APB1, APB1, APB1, APB1,  
 #endif
 
 const TIM_TypeDef_P TIMER_REGS[TIMERS_COUNT] =  {TIM1, TIM2, TIM3, TIM4, TIM5, TIM6, TIM7, TIM8, TIM12, TIM13, TIM14, TIM15, TIM16, TIM17};
-const int TIMER_VECTORS[TIMERS_COUNT] =         {13,   15,   16,     17,   18,    19,    20,    21,    22};
+const int TIMER_VECTORS[TIMERS_COUNT] =         {25,   28,   29,   30,   50,   54,   55,   44,    0,     0,     0,    116,   117,   118  };
+const int TIMER_POWER_BIT[TIMERS_COUNT] =       {0,    0,    1,    2,    3,    4,    5,    1,     6,     7,     8,    16,    17,    18   };
+const uint_p TIMER_POWER_PORT[TIMERS_COUNT] =   {APB2, APB1, APB1, APB1, APB1, APB1, APB1, APB2,  APB1,  APB1,  APB1, APB2,  APB2,  APB2 };
 #endif //
 
 void stm32_timer_open(EXO* exo, TIMER_NUM num, unsigned int flags)

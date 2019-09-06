@@ -245,9 +245,6 @@ void svc(unsigned int num, unsigned int param1, unsigned int param2, unsigned in
     }
 }
 
-#include "../userspace/stm32/stm32_driver.h"
-#include "../userspace/gpio.h"
-
 void startup()
 {
     //setup __GLOBAL

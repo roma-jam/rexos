@@ -219,6 +219,24 @@ typedef enum {
     TIM_17,
     TIM_MAX
 }TIMER_NUM;
+#elif defined(STM32H7)
+typedef enum {
+    TIM_1 = 0,
+    TIM_2,
+    TIM_3,
+    TIM_4,
+    TIM_5,
+    TIM_6,
+    TIM_7,
+    TIM_8,
+    TIM_12,
+    TIM_13,
+    TIM_14,
+    TIM_15,
+    TIM_16,
+    TIM_17,
+    TIM_MAX
+}TIMER_NUM;
 #else
 typedef enum {
     TIM_1 = 0,
@@ -240,7 +258,8 @@ typedef enum {
     TIM_17,
     TIM_18,
     TIM_19,
-    TIM_20
+    TIM_20,
+    TIM_MAX
 }TIMER_NUM;
 #endif
 

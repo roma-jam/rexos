@@ -153,15 +153,19 @@ void nrf_power_init(EXO* exo)
 #endif // NRF_SRAM_POWER_CONFIG
 
 #if (NRF_SRAM_RETENTION_ENABLE)
+#if defined(NRF51)
     /* keep retention during system OFF */
     NRF_POWER->RAMON |= POWER_RAMON_OFFRAM0_Msk;
 #if (!(NRF_SRAM_POWER_CONFIG) || (NRF_RAM1_ENABLE))
     NRF_POWER->RAMON |= POWER_RAMON_OFFRAM1_Msk;
+#endif // NRF51
 #endif // NRF_RAM1_ENABLE
 #else
     /* do not keep retention during system OFF */
+#if defined(NRF51)
     NRF_POWER->RAMON &= ~(POWER_RAMON_OFFRAM0_Msk);
     NRF_POWER->RAMON &= ~(POWER_RAMON_OFFRAM1_Msk);
+#endif // NRF51
 #endif // NRF_SRAM_RETENTION_ENABLE
 }
 

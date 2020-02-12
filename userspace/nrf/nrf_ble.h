@@ -9,7 +9,7 @@
 #ifndef _NRF_BLE_H_
 #define _NRF_BLE_H_
 
-#include "nrf_radio.h"
+#include "radio.h"
 #include "nrf_radio_config.h"
 #include "nrf_ble_config.h"
 #include "../io.h"

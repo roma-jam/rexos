@@ -65,11 +65,11 @@ void exodriver_post(IPC* ipc)
         nrf_flash_request(__KERNEL->exo, ipc);
         break;
 #endif //NRF_FLASH_DRIVER
-#if (NRF_RF_DRIVER)
+#if (NRF_RADIO_DRIVER)
     case HAL_RF:
-        nrf_rf_request(__KERNEL->exo, ipc);
+        nrf_radio_request(__KERNEL->exo, ipc);
         break;
-#endif // NRF_RF_DRIVER
+#endif // NRF_RADIO_DRIVER
 #if (NRF_RNG_DRIVER)
     case HAL_RNG:
         nrf_rng_request(__KERNEL->exo, ipc);
@@ -134,9 +134,9 @@ void exodriver_init()
 #if (NRF_FLASH_DRIVER)
     nrf_flash_init(__KERNEL->exo);
 #endif //LPC_FLASH_DRIVER
-#if (NRF_RF_DRIVER)
-    nrf_rf_init(__KERNEL->exo);
-#endif // NRF_RF_DRIVER
+#if (NRF_RADIO_DRIVER)
+    nrf_radio_init(__KERNEL->exo);
+#endif // NRF_RADIO_DRIVER
 #if (NRF_RNG_DRIVER)
     nrf_rng_init(__KERNEL->exo);
 #endif // NRF_RNG_DRIVER

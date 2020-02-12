@@ -78,8 +78,8 @@ typedef struct {
     uint8_t pdu[NRF_MAX_PACKET_LENGTH];
 } RADIO_DRV;
 
-void nrf_rf_init(EXO* exo);
-void nrf_rf_request(EXO* exo, IPC* ipc);
+void nrf_radio_init(EXO* exo);
+void nrf_radio_request(EXO* exo, IPC* ipc);
 
 
 #endif /* _NRF_RF_H_ */

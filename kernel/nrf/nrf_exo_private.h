@@ -33,9 +33,9 @@
 #if (NRF_RTC_DRIVER)
 #include "nrf_rtc.h"
 #endif // NRF_UART_DRIVER
-#if (NRF_RF_DRIVER)
-#include "nrf_rf.h"
-#endif // NRF_RF_DRIVER
+#if (NRF_RADIO_DRIVER)
+#include "nrf_radio.h"
+#endif // NRF_RADIO_DRIVER
 #if (NRF_RNG_DRIVER)
 #include "nrf_rng.h"
 #endif // NRF_RNG_DRIVER
@@ -67,9 +67,6 @@ typedef struct _EXO {
 #if (NRF_RTC_DRIVER)
     RTC_DRV rtc;
 #endif // NRF_RTC_DRIVER
-#if (NRF_RF_DRIVER)
-    RADIO_DRV rf;
-#endif // NRF_RF_DRIVER
 #if (NRF_RNG_DRIVER)
     RNG_DRV rng;
 #endif // nrf_rng_irq

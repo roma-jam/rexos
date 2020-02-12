@@ -8,6 +8,7 @@
 
 #include "nrf_pin.h"
 #include "nrf_exo_private.h"
+#include "../../userspace/nrf/nrf_driver.h"
 #include "sys_config.h"
 #include <string.h>
 #include "../kerror.h"
@@ -21,23 +22,23 @@ void nrf_gpio_enable_pin(GPIO_DRV* gpio, PIN pin, PIN_MODE mode, PIN_PULL pull)
 {
     gpio->used_pins[pin]++;
 
-    NRF_GPIO->PIN_CNF[pin] = (GPIO_PIN_CNF_SENSE_Disabled << GPIO_PIN_CNF_SENSE_Pos) | \
+    GPIO_REG(pin)->PIN_CNF[PIN(pin)] = (GPIO_PIN_CNF_SENSE_Disabled << GPIO_PIN_CNF_SENSE_Pos) | \
                             (GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos)  | \
                             (GPIO_PIN_CNF_PULL_Disabled << GPIO_PIN_CNF_PULL_Pos) | \
                             (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos);
 
     /* set up pull up config */
-    NRF_GPIO->PIN_CNF[pin] |= (pull << GPIO_PIN_CNF_PULL_Pos);
+    GPIO_REG(pin)->PIN_CNF[PIN(pin)] |= (pull << GPIO_PIN_CNF_PULL_Pos);
 
     if(PIN_MODE_INPUT == mode)
     {
-        NRF_GPIO->DIRSET &= ~(1 << pin);
-        NRF_GPIO->PIN_CNF[pin] |= (GPIO_PIN_CNF_DIR_Input << GPIO_PIN_CNF_DIR_Pos);
+        GPIO_REG(pin)->DIRSET &= ~(1 << PIN(pin));
+        GPIO_REG(pin)->PIN_CNF[PIN(pin)] |= (GPIO_PIN_CNF_DIR_Input << GPIO_PIN_CNF_DIR_Pos);
     }
     else
     {
-        NRF_GPIO->DIRSET |= (1 << pin);
-        NRF_GPIO->PIN_CNF[pin] |= (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos);
+        GPIO_REG(pin)->DIRSET |= (1 << PIN(pin));
+        GPIO_REG(pin)->PIN_CNF[PIN(pin)] |= (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos);
     }
 }
 

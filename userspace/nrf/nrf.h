@@ -66,8 +66,23 @@
 #define NRF52832xxAA
 #endif // NRF52832QFAA
 
+#if defined(NRF52840QIAA)
+#define NRF52840xxAA
+#endif // NRF52840QIAA
+
 #if defined(NRF52832xxAA)
+#define NRF52832
+#endif //
+
+#if defined(NRF52840xxAA)
+#define NRF52840
+#endif //
+
+#if defined(NRF52832xxAA) || defined(NRF52840xxAA)
 #define NRF52
+#endif //
+
+#if defined(NRF52832xxAA)
 //512K
 #define FLASH_SIZE              0x80000
 //64K
@@ -79,9 +94,25 @@
 #define TIMERS_COUNT            5
 #define SOFTWARE_IRQ_COUNT      6
 #define GPIO_COUNT              32
-
 #define IRQ_VECTORS_COUNT       37
 #endif // NRF52832xxAA
+
+#if defined(NRF52840QIAA)
+// 1 MB
+#define FLASH_SIZE              0x100000
+// 256 KB
+#define SRAM_SIZE               0x40000
+
+#define UARTS_COUNT             1
+#define SPI_COUNT               3
+#define RTC_COUNT               3
+#define TIMERS_COUNT            5
+#define SOFTWARE_IRQ_COUNT      0
+// 32 on P0, 16 on P1
+#define GPIO_COUNT              48
+#define IRQ_VECTORS_COUNT       47
+#endif // NRF52840QIAA
+
 
 #if defined(NRF51)
 #ifndef CORTEX_M0
@@ -112,11 +143,17 @@
 #include "nrf51_bitfields.h"
 #include "nrf51_deprecated.h"
 #elif defined(NRF52)
+#if defined(NRF52840QIAA)
+#include "nrf51_to_nrf52.h"
+#include "nrf52840.h"
+#include "nrf52840_bitfields.h"
+#include "nrf52_to_nrf52840.h"
 
+#else // NRF52832xxAA
 #include "nrf51_to_nrf52.h"
 #include "nrf52.h"
-#include "nrf52.h"
 #include "nrf52_bitfields.h"
+#endif // NRF52832xxAA
 #else
 #error "Device family not defined."
 #endif /* NRF51 */

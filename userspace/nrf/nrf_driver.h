@@ -53,8 +53,16 @@ typedef enum {
 } RESET_REASON;
 //---------------------------------- GPIO --------------------------------------
 typedef enum {
-    P0 = 0, P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15,
-    P16, P17, P18, P19, P20, P21, P22, P23, P24, P25, P26, P27, P28, P29, P30,
+    // P0
+    P0_0 = 0, P0_1, P0_2, P0_3, P0_4, P0_5, P0_6, P0_7, P0_8, P0_9, P0_10,
+    P0_11, P0_12, P0_13, P0_14, P0_15, P0_16, P0_17, P0_18, P0_19, P0_20,
+    P0_21, P0_22, P0_23, P0_24, P0_25, P0_26, P0_27, P0_28, P0_29, P0_30, P0_31,
+#if defined(NRF52840)
+    // P1
+    P1_0, P1_1, P1_2, P1_3, P1_4, P1_5, P1_6, P1_7, P1_8, P1_9, P1_10, P1_11,
+    P1_12, P1_13, P1_14, P1_15, P1_16, P1_17, P1_18, P1_19, P1_20, P1_21,
+    P1_22, P1_23, P1_24, P1_25, P1_26, P1_27, P1_28, P1_29, P1_30, P1_31,
+#endif // NRF52840
     //only for service calls
     PIN_DEFAULT,
     PIN_UNUSED
@@ -76,6 +84,15 @@ typedef enum {
     PIN_SENSE_LOW       = GPIO_PIN_CNF_SENSE_Low,      ///<  Pin sense low level.
     PIN_SENSE_HIGH      = GPIO_PIN_CNF_SENSE_High,    ///<  Pin sense high level.
 } PIN_SENSE;
+
+#if defined(NRF52840)
+#define GPIO_REG(pin)           ((NRF_GPIO_Type*)((pin > P0_31)? NRF_P1 : NRF_P0))
+#else
+#define GPIO_REG(pin)           (NRF_GPIO)
+#endif //
+
+#define PIN(pin)                ((pin > P0_31)? (pin - 32) : pin)
+
 //---------------------------------- TIMER -------------------------------------
 #define TIMER_CHANNEL_INVALID                        0xff
 
@@ -145,7 +162,14 @@ typedef enum {
 typedef enum {
     RADIO_MODE_RF_1Mbit = 0,
     RADIO_MODE_RF_2Mbit,
+#if defined(NRF52840)
+    RADIO_MODE_RF_Ieee802154_250Kbit,
+    RADIO_MODE_BLE_LR125Kbit,
+    RADIO_MODE_BLE_LR500Kbit,
+#endif
+#if defined(NRF52832)
     RADIO_MODE_RF_250Kbit,
+#endif
     RADIO_MODE_BLE_1Mbit,
 #if defined(NRF52)
     RADIO_MODE_BLE_2Mbit

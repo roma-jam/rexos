@@ -11,10 +11,6 @@
 #include "../pin.h"
 #include "nrf_driver.h"
 
-#if defined(NRF52)
-#define NRF_GPIO                    NRF_P0
-#endif // NRF52
-
 void gpio_enable_pin(unsigned int pin, GPIO_MODE mode)
 {
     switch (mode)
@@ -41,17 +37,17 @@ void gpio_disable_pin(unsigned int pin)
 
 void gpio_set_pin(unsigned int pin)
 {
-    NRF_GPIO->OUTSET = (1 << pin);
+    GPIO_REG(pin)->OUTSET = (1 << PIN(pin));
 }
 
 void gpio_reset_pin(unsigned int pin)
 {
-    NRF_GPIO->OUTCLR = (1 << pin);
+    GPIO_REG(pin)->OUTCLR = (1 << PIN(pin));
 }
 
 bool gpio_get_pin(unsigned int pin)
 {
-    return ((NRF_GPIO->IN >> pin) & 1);
+    return ((GPIO_REG(pin)->IN >> PIN(pin)) & 1);
 }
 
 unsigned int gpio_get_mask(unsigned port, unsigned int mask)

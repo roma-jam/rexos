@@ -6,7 +6,7 @@
     author: RJ (jam_roma@yahoo.com)
 */
 
-#include "nrf_radio.h"
+#include <nrf/radio.h>
 #include "nrf_radio_config.h"
 #include "sys_config.h"
 #include "object.h"
@@ -42,7 +42,6 @@ HANDLE radio_open(char* process_name, RADIO_MODE mode)
 //    return handle;
 
     /* straight to KERNEL */
-
     ack(KERNEL_HANDLE, HAL_REQ(HAL_RF, IPC_OPEN), mode, 0, 0);
     // temp
     return INVALID_HANDLE;

@@ -6,12 +6,12 @@
     author: RL (jam_roma@yahoo.com)
 */
 
-#include "nrf_rf.h"
+#include "nrf_radio.h"
 #include "nrf_power.h"
 #include "../../userspace/sys.h"
-#include "../../userspace/nrf/nrf_radio.h"
-#include "../../userspace/nrf/nrf_ble.h"
 #include "../../userspace/nrf/nrf_driver.h"
+#include "../../userspace/nrf/nrf_ble.h"
+#include "../../userspace/nrf/radio.h"
 #include "../kerror.h"
 #include "../kstdlib.h"
 #include "../ksystime.h"
@@ -25,7 +25,7 @@
 /** Return 2^n, used for setting nth bit as 1*/
 #define SET_BIT(n)      (1UL << n)
 
-static inline void nrf_rf_flush_events()
+static inline void nrf_radio_flush_events()
 {
 #if (0)
     printk("R %X\n", NRF_RADIO->EVENTS_READY);
@@ -48,28 +48,30 @@ static inline void nrf_rf_flush_events()
     NRF_RADIO->EVENTS_RSSIEND = 0;
 }
 
-static inline void nrf_rf_irq(int vector, void* param)
+static inline void nrf_radio_irq(int vector, void* param)
 {
     EXO* exo = (EXO*)param;
     uint8_t pkt_size = 0;
     bool complete = false;
     /* disable timer */
-    ksystime_soft_timer_stop(exo->rf.timer);
+    ksystime_soft_timer_stop(exo->radio.timer);
 
     /* parse irq */
-    switch(exo->rf.state)
+    switch(exo->radio.state)
     {
         case RADIO_STATE_RX:
         {
             if((NRF_RADIO->EVENTS_RSSIEND == 1) && (NRF_RADIO->INTENSET & RADIO_INTENSET_RSSIEND_Msk))
             {
                 NRF_RADIO->TASKS_RSSISTOP = 1;
-                exo->rf.rssi = (NRF_RADIO->RSSISAMPLE);
-                exo->rf.state = RADIO_STATE_RX_DATA;
+                exo->radio.rssi = (NRF_RADIO->RSSISAMPLE);
+                exo->radio.state = RADIO_STATE_RX_DATA;
             }
 
             if((NRF_RADIO->EVENTS_ADDRESS == 1) && (NRF_RADIO->INTENSET & RADIO_INTENSET_ADDRESS_Msk))
-                exo->rf.addr = (NRF_RADIO->RXMATCH);
+            {
+                exo->radio.addr = (NRF_RADIO->RXMATCH);
+            }
 
             break;
         }
@@ -79,12 +81,12 @@ static inline void nrf_rf_irq(int vector, void* param)
                 break;
 
             /* save data size to io */
-            pkt_size = exo->rf.pdu[1] + 2;
+            pkt_size = exo->radio.pdu[1] + 2;
             /* pkt_size is second byte plus 2 preamble */
-            if(exo->rf.io->data_size + pkt_size < io_get_free(exo->rf.io))
+            if(exo->radio.io->data_size + pkt_size < io_get_free(exo->radio.io))
             {
-                io_data_append(exo->rf.io, exo->rf.pdu, pkt_size);
-                io_data_append(exo->rf.io, &(exo->rf.rssi), sizeof(uint32_t));
+                io_data_append(exo->radio.io, exo->radio.pdu, pkt_size);
+                io_data_append(exo->radio.io, &(exo->radio.rssi), sizeof(uint32_t));
             }
             complete = true;
             break;
@@ -96,6 +98,7 @@ static inline void nrf_rf_irq(int vector, void* param)
 
             complete = true;
             break;
+
         default:
             break;
     }
@@ -105,40 +108,40 @@ static inline void nrf_rf_irq(int vector, void* param)
         /* disable task */
         NRF_RADIO->TASKS_DISABLE = 1;
         /* send reply back */
-        iio_complete(exo->rf.process,
-                        HAL_IO_CMD(HAL_RF, (exo->rf.state == RADIO_STATE_TX)? IPC_WRITE : IPC_READ),
-                        0, exo->rf.io);
+        iio_complete(exo->radio.process,
+                        HAL_IO_CMD(HAL_RF, (exo->radio.state == RADIO_STATE_TX)? IPC_WRITE : IPC_READ),
+                        0, exo->radio.io);
 
         /* flush data */
-        exo->rf.io = NULL;
-        exo->rf.process = INVALID_HANDLE;
-        exo->rf.state = RADIO_STATE_IDLE;
+        exo->radio.io = NULL;
+        exo->radio.process = INVALID_HANDLE;
+        exo->radio.state = RADIO_STATE_IDLE;
+        /* flush events only when complete */
+        nrf_radio_flush_events();
     }
-
-    nrf_rf_flush_events();
 }
 
-void nrf_rf_init(EXO* exo)
+void nrf_radio_init(EXO* exo)
 {
-    exo->rf.active = false;
-    exo->rf.timer = INVALID_HANDLE;
-    exo->rf.io = NULL;
-    exo->rf.process = INVALID_HANDLE;
-    exo->rf.max_size = 0;
-    exo->rf.state = RADIO_STATE_IDLE;
+    exo->radio.active = false;
+    exo->radio.timer = INVALID_HANDLE;
+    exo->radio.io = NULL;
+    exo->radio.process = INVALID_HANDLE;
+    exo->radio.max_size = 0;
+    exo->radio.state = RADIO_STATE_IDLE;
 }
 
-static void nrf_rf_start(EXO* exo)
+static void nrf_radio_start(EXO* exo)
 {
-    exo->rf.io = NULL;
-    exo->rf.process = INVALID_HANDLE;
-    exo->rf.max_size = 0;
-    exo->rf.state = RADIO_STATE_IDLE;
-    /* disable IRQ */
+    exo->radio.io = NULL;
+    exo->radio.process = INVALID_HANDLE;
+    exo->radio.max_size = 0;
+    exo->radio.state = RADIO_STATE_IDLE;
+    /* enable IRQ */
     NVIC_EnableIRQ(RADIO_IRQn);
 }
 
-static void nrf_rf_stop(EXO* exo)
+static void nrf_radio_stop(EXO* exo)
 {
     /* disable IRQ */
     NVIC_DisableIRQ(RADIO_IRQn);
@@ -146,20 +149,30 @@ static void nrf_rf_stop(EXO* exo)
     NRF_RADIO->TASKS_DISABLE = 1;
     NRF_RADIO->TASKS_STOP = 1;
     /* flush events */
-    nrf_rf_flush_events();
+    nrf_radio_flush_events();
 }
 
-static inline void nrf_rf_setup_mode(EXO* exo, RADIO_MODE mode)
+static inline void nrf_radio_setup_mode(EXO* exo, RADIO_MODE mode)
 {
     /* set same mode */
-    if(exo->rf.mode == mode)
+    if(exo->radio.mode == mode)
         return;
 
     /* set mode */
-    exo->rf.mode = mode;
+    exo->radio.mode = mode;
 
     switch(mode)
     {
+#if defined(NRF52840)
+        case RADIO_MODE_RF_Ieee802154_250Kbit:
+        case RADIO_MODE_BLE_LR125Kbit:
+        case RADIO_MODE_BLE_LR500Kbit:
+            // TODO:
+            printk("not implemented\n");
+            kerror(ERROR_NOT_SUPPORTED);
+            break;
+#endif // NRF52840
+#if defined(NRF52832)
         case RADIO_MODE_RF_250Kbit:
             /* set RADIO mode to RF 250 kBit */
             NRF_RADIO->MODE = RADIO_MODE_MODE_Nrf_250Kbit << RADIO_MODE_MODE_Pos;
@@ -208,14 +221,15 @@ static inline void nrf_rf_setup_mode(EXO* exo, RADIO_MODE mode)
                                    SET_BIT(1) | SET_BIT(0);
 
             break;
+#endif // NRF52832
         case RADIO_MODE_RF_1Mbit:
             // TODO:
-//            printk("not implemented\n");
+            printk("not implemented\n");
             kerror(ERROR_NOT_SUPPORTED);
             break;
         case RADIO_MODE_RF_2Mbit:
             // TODO:
-//            printk("not implemented\n");
+            printk("not implemented\n");
             kerror(ERROR_NOT_SUPPORTED);
             break;
         case RADIO_MODE_BLE_1Mbit:
@@ -308,7 +322,6 @@ static inline void nrf_rf_setup_mode(EXO* exo, RADIO_MODE mode)
         * ADDRESS event and RSSISTART task
         * END event and DISABLE task
         * */
-
        NRF_RADIO->SHORTS = RADIO_SHORTS_READY_START_Msk |
                            RADIO_SHORTS_ADDRESS_RSSISTART_Msk |
                            RADIO_SHORTS_END_DISABLE_Msk;
@@ -319,18 +332,18 @@ static inline void nrf_rf_setup_mode(EXO* exo, RADIO_MODE mode)
 #endif // NRF52
 }
 
-static inline void nrf_rf_open(EXO* exo, RADIO_MODE mode)
+static inline void nrf_radio_open(EXO* exo, RADIO_MODE mode)
 {
     /* already configured */
-    if(exo->rf.active)
+    if(exo->radio.active)
     {
         kerror(ERROR_ALREADY_CONFIGURED);
         return;
     }
 
     /* create timer */
-    exo->rf.timer = ksystime_soft_timer_create(KERNEL_HANDLE, 0, HAL_RF);
-    if(exo->rf.timer == INVALID_HANDLE)
+    exo->radio.timer = ksystime_soft_timer_create(KERNEL_HANDLE, 0, HAL_RF);
+    if(exo->radio.timer == INVALID_HANDLE)
     {
         kerror(ERROR_OUT_OF_MEMORY);
         return;
@@ -341,27 +354,27 @@ static inline void nrf_rf_open(EXO* exo, RADIO_MODE mode)
     NRF_RADIO->POWER = 1;
 
     /* Set radio transmit power to default -20dBm */
-    NRF_RADIO->TXPOWER = (RADIO_TXPOWER_TXPOWER_Neg20dBm << RADIO_TXPOWER_TXPOWER_Pos);
+    NRF_RADIO->TXPOWER = (RADIO_TXPOWER_TXPOWER_0dBm << RADIO_TXPOWER_TXPOWER_Pos);
 
     /* setup mode */
-    nrf_rf_setup_mode(exo, mode);
+    nrf_radio_setup_mode(exo, mode);
 
     /* Set the pointer to write the incoming packet. */
-    NRF_RADIO->PACKETPTR = (uint32_t) exo->rf.pdu;
+    NRF_RADIO->PACKETPTR = (uint32_t) exo->radio.pdu;
 
-    exo->rf.active = true;
+    exo->radio.active = true;
 
     /* setup IRQ */
-    kirq_register(KERNEL_HANDLE, RADIO_IRQn, nrf_rf_irq, (void*)exo);
+    kirq_register(KERNEL_HANDLE, RADIO_IRQn, nrf_radio_irq, (void*)exo);
     // Enable Interrupt for RADIO in the core.
     NVIC_SetPriority(RADIO_IRQn, 2);
 
-    nrf_rf_start(exo);
+    nrf_radio_start(exo);
 }
 
-static void nrf_rf_close(EXO* exo)
+static void nrf_radio_close(EXO* exo)
 {
-    if(!exo->rf.active)
+    if(!exo->radio.active)
     {
         kerror(ERROR_NOT_CONFIGURED);
             return;
@@ -369,16 +382,16 @@ static void nrf_rf_close(EXO* exo)
     /* inregister IRQ */
     kirq_unregister(KERNEL_HANDLE, RADIO_IRQn);
 
-    ksystime_soft_timer_destroy(exo->rf.timer);
-    nrf_rf_init(exo);
+    ksystime_soft_timer_destroy(exo->radio.timer);
+    nrf_radio_init(exo);
 }
 
-static void nrf_rf_io(EXO* exo, HANDLE process, HANDLE user, IO* io, unsigned int size, bool rx)
+static void nrf_radio_io(EXO* exo, HANDLE process, HANDLE user, IO* io, unsigned int size, bool rx)
 {
     RADIO_STACK* stack = io_stack(io);
     io_pop(io, sizeof(RADIO_STACK));
 
-    if(!exo->rf.active)
+    if(!exo->radio.active)
     {
         kerror(ERROR_NOT_CONFIGURED);
         return;
@@ -391,15 +404,15 @@ static void nrf_rf_io(EXO* exo, HANDLE process, HANDLE user, IO* io, unsigned in
         return;
     }
 
-    exo->rf.io = io;
-    exo->rf.max_size = io_get_free(io);
-    exo->rf.process = process;
+    exo->radio.io = io;
+    exo->radio.max_size = io_get_free(io);
+    exo->radio.process = process;
 
     /* enable interrupt */
     NRF_RADIO->INTENSET = RADIO_INTENSET_END_Msk |
                           RADIO_INTENSET_RSSIEND_Msk ;
 
-    if(RADIO_MODE_BLE_1Mbit == exo->rf.mode)
+    if(RADIO_MODE_BLE_1Mbit == exo->radio.mode)
     {
         /* set data whiteng for BLE depending on channel */
         NRF_RADIO->DATAWHITEIV = (NRF_RADIO->FREQUENCY == 2) ? 37 : ((NRF_RADIO->FREQUENCY == 26) ? 38 : 39);
@@ -412,24 +425,25 @@ static void nrf_rf_io(EXO* exo, HANDLE process, HANDLE user, IO* io, unsigned in
 
     /* setup timeout */
     if(stack->flags & RADIO_FLAG_TIMEOUT)
-        ksystime_soft_timer_start_ms(exo->rf.timer, stack->timeout_ms);
+        ksystime_soft_timer_start_ms(exo->radio.timer, stack->timeout_ms);
 
     /* flush events end */
-    nrf_rf_flush_events();
+    nrf_radio_flush_events();
 
     if(rx)
     {
         /* change state */
-        exo->rf.state = RADIO_STATE_RX;
+        exo->radio.state = RADIO_STATE_RX;
         /* Before the RADIO is able to receive a packet, it must first ramp-up in RX mode */
         NRF_RADIO->TASKS_RXEN = 1;
     }
     else
     {
+
         /* copy data from io to pdu */
-        memcpy(exo->rf.pdu, io_data(exo->rf.io), exo->rf.io->data_size);
+        memcpy(exo->radio.pdu, io_data(exo->radio.io), exo->radio.io->data_size);
         /* change state */
-        exo->rf.state = RADIO_STATE_TX;
+        exo->radio.state = RADIO_STATE_TX;
         /* Before the RADIO is able to transmit a packet, it must first ramp-up in TX mode */
         NRF_RADIO->TASKS_TXEN = 1;
     }
@@ -438,23 +452,23 @@ static void nrf_rf_io(EXO* exo, HANDLE process, HANDLE user, IO* io, unsigned in
     kerror(ERROR_SYNC);
 }
 
-static void nrf_rf_timeout(EXO* exo)
+static void nrf_radio_timeout(EXO* exo)
 {
     /* stop irq and all current job */
-    nrf_rf_stop(exo);
+    nrf_radio_stop(exo);
 
     /* send timeout reply back */
-    iio_complete_ex(exo->rf.process,
-                HAL_IO_CMD(HAL_RF, (exo->rf.state == RADIO_STATE_RX) ? IPC_READ : IPC_WRITE),
-                0, exo->rf.io, ERROR_TIMEOUT);
+    iio_complete_ex(exo->radio.process,
+                HAL_IO_CMD(HAL_RF, (exo->radio.state == RADIO_STATE_RX) ? IPC_READ : IPC_WRITE),
+                0, exo->radio.io, ERROR_TIMEOUT);
 
     /* start irq, flush data */
-    nrf_rf_start(exo);
+    nrf_radio_start(exo);
 }
 
-static void nrf_rf_set_channel(EXO* exo, uint8_t channel)
+static void nrf_radio_set_channel(EXO* exo, uint8_t channel)
 {
-    if(!exo->rf.active)
+    if(!exo->radio.active)
     {
         kerror(ERROR_NOT_CONFIGURED);
         return;
@@ -463,9 +477,9 @@ static void nrf_rf_set_channel(EXO* exo, uint8_t channel)
     NRF_RADIO->FREQUENCY = channel;
 }
 
-static void nrf_rf_set_txpower(EXO* exo, uint8_t power)
+static void nrf_radio_set_txpower(EXO* exo, uint8_t power)
 {
-    if(!exo->rf.active)
+    if(!exo->radio.active)
     {
         kerror(ERROR_NOT_CONFIGURED);
         return;
@@ -475,9 +489,9 @@ static void nrf_rf_set_txpower(EXO* exo, uint8_t power)
     NRF_RADIO->TXPOWER = (power << RADIO_TXPOWER_TXPOWER_Pos);
 }
 
-static inline void nrf_rf_set_address(EXO* exo, unsigned int address)
+static inline void nrf_radio_set_address(EXO* exo, unsigned int address)
 {
-    if(!exo->rf.active)
+    if(!exo->radio.active)
     {
         kerror(ERROR_NOT_CONFIGURED);
         return;
@@ -486,37 +500,37 @@ static inline void nrf_rf_set_address(EXO* exo, unsigned int address)
     NRF_RADIO->RXADDRESSES = address;
 }
 
-void nrf_rf_request(EXO* exo, IPC* ipc)
+void nrf_radio_request(EXO* exo, IPC* ipc)
 {
     switch (HAL_ITEM(ipc->cmd))
     {
     case IPC_OPEN:
-        nrf_rf_open(exo, ipc->param1);
+        nrf_radio_open(exo, ipc->param1);
         break;
     case IPC_CLOSE:
-        nrf_rf_close(exo);
+        nrf_radio_close(exo);
         break;
     case IPC_READ:
     case IPC_WRITE:
-        nrf_rf_io(exo, ipc->process, (HANDLE)ipc->param1, (IO*)ipc->param2, ipc->param3, (IPC_READ == HAL_ITEM(ipc->cmd)));
+        nrf_radio_io(exo, ipc->process, (HANDLE)ipc->param1, (IO*)ipc->param2, ipc->param3, (IPC_READ == HAL_ITEM(ipc->cmd)));
         break;
     case IPC_TIMEOUT:
-        nrf_rf_timeout(exo);
+        nrf_radio_timeout(exo);
         break;
     case RADIO_SET_CHANNEL:
-        nrf_rf_set_channel(exo, ipc->param1);
+        nrf_radio_set_channel(exo, ipc->param1);
         break;
     case RADIO_SET_TXPOWER:
-        nrf_rf_set_txpower(exo, ipc->param1);
+        nrf_radio_set_txpower(exo, ipc->param1);
         break;
     case RADIO_SET_ADDRESS:
-        nrf_rf_set_address(exo, ipc->param1);
+        nrf_radio_set_address(exo, ipc->param1);
         break;
     case RADIO_START:
-        nrf_rf_start(exo);
+        nrf_radio_start(exo);
         break;
     case RADIO_STOP:
-        nrf_rf_stop(exo);
+        nrf_radio_stop(exo);
         break;
     default:
         kerror(ERROR_NOT_SUPPORTED);
